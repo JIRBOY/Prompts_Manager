@@ -1,0 +1,24 @@
+[package]
+name = "prompt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = [
+    "glow",
+    "default_fonts",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+egui_extras = "0.31"
+arboard = "3"
+rfd = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

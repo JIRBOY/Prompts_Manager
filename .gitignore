@@ -1,3 +1,8 @@
 /target
+/source/target
 /dist
 /build
+*.exe
+*.exe.old
+*.rar
+/other
