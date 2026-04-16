@@ -269,7 +269,8 @@ impl eframe::App for App {
 
             // ── 标题居中 ──
             ui.add_space(8.0);
-            ui.centered_and_justified(|ui| {
+            ui.horizontal(|ui| {
+                ui.add_space(12.0);
                 ui.heading("AI 提示词管理器");
             });
             ui.separator();
