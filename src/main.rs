@@ -3,7 +3,6 @@
 use chrono::Local;
 use eframe::egui;
 use egui::{FontData, FontDefinitions};
-use egui_extras::{Column, TableBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -375,55 +374,68 @@ impl eframe::App for App {
             ui.vertical(|ui| {
                 ui.add_space(8.0);
 
-                TableBuilder::new(ui)
-                    .striped(true)
-                    .resizable(true)
-                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                    .column(Column::remainder())
-                    .column(Column::exact(80.0))
-                    .column(Column::exact(140.0))
-                    .min_scrolled_height(0.0)
-                    .max_scroll_height(list_height)
-                    .header(28.0, |mut header: egui_extras::TableRow<'_, '_>| {
-                        header.col(|ui: &mut egui::Ui| {
-                            ui.label(egui::RichText::new("标题").strong());
-                        });
-                        header.col(|ui: &mut egui::Ui| {
-                            ui.label(egui::RichText::new("标签").strong());
-                        });
-                        header.col(|ui: &mut egui::Ui| {
-                            ui.label(egui::RichText::new("创建时间").strong());
-                        });
-                    })
-                    .body(|mut body: egui_extras::TableBody<'_>| {
+                // 表头
+                ui.horizontal(|ui| {
+                    ui.set_width(ui.available_width());
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("标题").strong());
+                    ui.add_space(ui.available_width() * 0.52);
+                    ui.label(egui::RichText::new("标签").strong());
+                    ui.add_space(80.0);
+                    ui.label(egui::RichText::new("创建时间").strong());
+                });
+                ui.separator();
+
+                // 可滚动列表
+                egui::ScrollArea::vertical()
+                    .max_height(list_height)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
                         let items: Vec<_> = self.filtered();
-                        let mut clicked_id: Option<u64> = None;
-                        let mut double_clicked_id: Option<u64> = None;
-                        for p in items {
-                            let is_selected = self.selected_id == Some(p.id);
-                            body.row(28.0, |mut row: egui_extras::TableRow<'_, '_>| {
-                                row.col(|ui: &mut egui::Ui| {
-                                    let resp = ui.label(&p.title);
-                                    if resp.clicked() { clicked_id = Some(p.id); }
-                                    if resp.double_clicked() { double_clicked_id = Some(p.id); }
-                                    if is_selected { resp.highlight(); }
-                                });
-                                row.col(|ui: &mut egui::Ui| {
-                                    let resp = ui.label(&p.tag);
-                                    if is_selected { resp.highlight(); }
-                                });
-                                row.col(|ui: &mut egui::Ui| {
-                                    ui.label(&p.created);
-                                });
+                        let sel = self.selected_id;
+                        let mut row_clicked: Option<u64> = None;
+                        let mut row_double: Option<u64> = None;
+                        for p in &items {
+                            let is_selected = sel == Some(p.id);
+                            let bg = if is_selected {
+                                ui.visuals().selection.bg_fill
+                            } else {
+                                ui.visuals().panel_fill
+                            };
+                            let row_resp = ui.horizontal(|ui| {
+                                ui.set_width(ui.available_width());
+                                ui.add_space(8.0);
+                                ui.label(&p.title);
+                                ui.add_space(ui.available_width() * 0.52);
+                                ui.label(&p.tag);
+                                ui.add_space(80.0);
+                                ui.label(&p.created);
                             });
+                            // 整行可点击
+                            if row_resp.response.clicked() {
+                                row_clicked = Some(p.id);
+                            }
+                            if row_resp.response.double_clicked() {
+                                row_double = Some(p.id);
+                            }
+                            // 高亮选中行背景
+                            if is_selected {
+                                let rect = row_resp.response.rect;
+                                ui.painter().rect_filled(
+                                    rect.expand(2.0),
+                                    egui::CornerRadius::same(3),
+                                    bg.gamma_multiply(0.3),
+                                );
+                            }
                         }
-                        if let Some(id) = clicked_id {
+                        // 在 borrow 结束后应用
+                        if let Some(id) = row_clicked {
                             self.selected_id = Some(id);
                             if let Some(p) = self.get_prompt(id) {
                                 self.preview_content = p.content.clone();
                             }
                         }
-                        if let Some(id) = double_clicked_id {
+                        if let Some(id) = row_double {
                             if let Some(p) = self.get_prompt(id) {
                                 self.editor = EditorState {
                                     open: true,
