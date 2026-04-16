@@ -3,6 +3,7 @@
 use chrono::Local;
 use eframe::egui;
 use egui::{FontData, FontDefinitions};
+use egui_extras::{Column, TableBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -374,79 +375,84 @@ impl eframe::App for App {
             ui.vertical(|ui| {
                 ui.add_space(8.0);
 
-                // 表头
-                ui.horizontal(|ui| {
-                    ui.set_width(ui.available_width());
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new("标题").strong());
-                    ui.add_space(ui.available_width() * 0.52);
-                    ui.label(egui::RichText::new("标签").strong());
-                    ui.add_space(80.0);
-                    ui.label(egui::RichText::new("创建时间").strong());
-                });
-                ui.separator();
-
-                // 可滚动列表
-                egui::ScrollArea::vertical()
-                    .max_height(list_height)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let items: Vec<_> = self.filtered();
+                TableBuilder::new(ui)
+                    .striped(true)
+                    .resizable(true)
+                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                    .column(Column::remainder())
+                    .column(Column::exact(80.0))
+                    .column(Column::exact(140.0))
+                    .min_scrolled_height(0.0)
+                    .max_scroll_height(list_height)
+                    .header(28.0, |mut header| {
+                        header.col(|ui: &mut egui::Ui| {
+                            ui.label(egui::RichText::new("标题").strong());
+                        });
+                        header.col(|ui: &mut egui::Ui| {
+                            ui.label(egui::RichText::new("标签").strong());
+                        });
+                        header.col(|ui: &mut egui::Ui| {
+                            ui.label(egui::RichText::new("创建时间").strong());
+                        });
+                    })
+                    .body(|mut body| {
+                        // 收集 owned 数据，避免借用 self.filtered() 时的冲突
+                        let items: Vec<Prompt> = self.filtered().iter().map(|p| (*p).clone()).collect();
                         let sel = self.selected_id;
-                        let mut row_clicked: Option<u64> = None;
-                        let mut row_double: Option<u64> = None;
                         for p in &items {
                             let is_selected = sel == Some(p.id);
-                            let bg = if is_selected {
-                                ui.visuals().selection.bg_fill
-                            } else {
-                                ui.visuals().panel_fill
-                            };
-                            let row_resp = ui.horizontal(|ui| {
-                                ui.set_width(ui.available_width());
-                                ui.add_space(8.0);
-                                ui.label(&p.title);
-                                ui.add_space(ui.available_width() * 0.52);
-                                ui.label(&p.tag);
-                                ui.add_space(80.0);
-                                ui.label(&p.created);
+                            let id = p.id;
+                            body.row(28.0, |mut row| {
+                                row.col(|ui: &mut egui::Ui| {
+                                    let resp = ui.label(&p.title);
+                                    if resp.clicked() {
+                                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("row_click"), id));
+                                    }
+                                    if resp.double_clicked() {
+                                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("row_double"), id));
+                                    }
+                                    if is_selected { resp.highlight(); }
+                                });
+                                row.col(|ui: &mut egui::Ui| {
+                                    let resp = ui.label(&p.tag);
+                                    if resp.clicked() {
+                                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("row_click"), id));
+                                    }
+                                    if is_selected { resp.highlight(); }
+                                });
+                                row.col(|ui: &mut egui::Ui| {
+                                    let resp = ui.label(&p.created);
+                                    if resp.clicked() {
+                                        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("row_click"), id));
+                                    }
+                                    if is_selected { resp.highlight(); }
+                                });
                             });
-                            // 整行可点击
-                            if row_resp.response.clicked() {
-                                row_clicked = Some(p.id);
-                            }
-                            if row_resp.response.double_clicked() {
-                                row_double = Some(p.id);
-                            }
-                            // 高亮选中行背景
-                            if is_selected {
-                                let rect = row_resp.response.rect;
-                                ui.painter().rect_filled(
-                                    rect.expand(2.0),
-                                    egui::CornerRadius::same(3),
-                                    bg.gamma_multiply(0.3),
-                                );
-                            }
-                        }
-                        // 在 borrow 结束后应用
-                        if let Some(id) = row_clicked {
-                            self.selected_id = Some(id);
-                            if let Some(p) = self.get_prompt(id) {
-                                self.preview_content = p.content.clone();
-                            }
-                        }
-                        if let Some(id) = row_double {
-                            if let Some(p) = self.get_prompt(id) {
-                                self.editor = EditorState {
-                                    open: true,
-                                    mode: EditorMode::Edit(p.id),
-                                    title: p.title.clone(),
-                                    tag: p.tag.clone(),
-                                    content: p.content.clone(),
-                                };
-                            }
                         }
                     });
+
+                // 读取并清除点击事件
+                let clicked_id = ctx.data_mut(|d| d.get_temp::<u64>(egui::Id::new("row_click")));
+                ctx.data_mut(|d| d.remove::<u64>(egui::Id::new("row_click")));
+                if let Some(id) = clicked_id {
+                    self.selected_id = Some(id);
+                    if let Some(p) = self.get_prompt(id) {
+                        self.preview_content = p.content.clone();
+                    }
+                }
+                let double_id = ctx.data_mut(|d| d.get_temp::<u64>(egui::Id::new("row_double")));
+                ctx.data_mut(|d| d.remove::<u64>(egui::Id::new("row_double")));
+                if let Some(id) = double_id {
+                    if let Some(p) = self.get_prompt(id) {
+                        self.editor = EditorState {
+                            open: true,
+                            mode: EditorMode::Edit(p.id),
+                            title: p.title.clone(),
+                            tag: p.tag.clone(),
+                            content: p.content.clone(),
+                        };
+                    }
+                }
 
                 ui.add_space(4.0);
 
